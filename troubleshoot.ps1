@@ -97,7 +97,7 @@ do {
                 
                 # Using -IsData shows it in the console and logs it
                 Write-Log -Message $auditData -Status "SUCCESS" -IsData
-            } catch { Write-Log "System Audit" "FAILED" }
+            } catch { Write-Log "System Audit" "FAILED" }}
     }
 } while ($choice -ne 'q')
 
