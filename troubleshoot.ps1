@@ -1,6 +1,6 @@
 <# 
 .SYNOPSIS
-Remote Support Toolkit - Hybrid Logging (Silent Actions + Visible Data)
+Remote Support Toolkit - Fixed Option 6 & Encoding
 #>
 
 # 1. Encoding & Path Setup
@@ -17,15 +17,13 @@ function Write-Log {
     param(
         [string]$Message, 
         [string]$Status = "INFO",
-        [switch]$IsData # Use this to show full output in console
+        [switch]$IsData 
     )
     $Timestamp = Get-Date -Format "HH:mm:ss"
     $LogLine = "[$Timestamp] [$Status] - $Message"
     
-    # 1. Log to File
     Add-Content -Path $LogFile -Value $LogLine -Encoding UTF8
     
-    # 2. Display to Console
     if ($IsData) {
         Write-Host "`n>>> DATA REPORT:" -ForegroundColor Yellow
         Write-Host $Message -ForegroundColor White
@@ -44,7 +42,7 @@ function Show-Menu {
     Write-Host "3) Cleanup: Clear Temp & Recycle Bin"
     Write-Host "4) Audit: Show System Info & GPU (Visible)"
     Write-Host "5) Check: Pending Reboot Status"
-    Write-Host "6) Check: Ping and DNS"
+    Write-Host "6) Check: Ping and DNS Test"
     Write-Host "Q) Quit and Open Summary"
     Write-Host "=============================================="
 }
@@ -78,8 +76,6 @@ do {
                 $serial = (Get-CimInstance Win32_Bios).SerialNumber
                 $gpu = Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name
                 $auditData = "Model: $($cs.Model) | Serial: $serial | GPU: $gpu | RAM: $([math]::Round($cs.TotalPhysicalMemory / 1GB, 2))GB"
-                
-                # Using -IsData shows it in the console and logs it
                 Write-Log -Message $auditData -Status "SUCCESS" -IsData
             } catch { Write-Log "System Audit" "FAILED" }
         }
@@ -89,18 +85,25 @@ do {
             Write-Log -Message "Reboot Status: $statusText" -Status "SUCCESS" -IsData
         }
         '6' {
-            Write-Log "Gathering System Audit..."
+            Write-Log "Testing Network Connectivity (Ping)..."
             try {
-                $ipToPing="8.8.8.8"
-                $urltoPing= "http://www.bbc.co.uk"
-                ping $ipToPing
-                ping $urlToPing
-                $auditData = "Pinged: $ipToPing | Pinged: $urlToPing"
+                $ipToPing = "8.8.8.8"
+                $urlToPing = "www.bbc.co.uk"
                 
-                # Using -IsData shows it in the console and logs it
-                Write-Log -Message $auditData -Status "SUCCESS" -IsData
-            } catch { Write-Log "System Audit" "FAILED" }
-        }}
+                # Test connection returns True/False
+                $pingIP = Test-Connection -ComputerName $ipToPing -Count 2 -Quiet
+                $pingURL = Test-Connection -ComputerName $urlToPing -Count 2 -Quiet
+                
+                $resIP = if($pingIP) {"SUCCESS"} else {"FAILED"}
+                $resURL = if($pingURL) {"SUCCESS"} else {"FAILED"}
+                
+                $pingResults = "Ping 8.8.8.8: $resIP | Ping BBC: $resURL"
+                Write-Log -Message $pingResults -Status "SUCCESS" -IsData
+            } catch { 
+                Write-Log "Network Connectivity Test" "FAILED" 
+            }
+        }
+    }
 } while ($choice -ne 'q')
 
 if (Test-Path $LogFile) { notepad.exe $LogFile }
