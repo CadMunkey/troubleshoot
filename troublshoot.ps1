@@ -1,6 +1,6 @@
 <# 
 .SYNOPSIS
-Remote Support Toolkit - High-Level Activity Logger
+Remote Support Toolkit - Hybrid Logging (Silent Actions + Visible Data)
 #>
 
 # 1. Encoding & Path Setup
@@ -14,27 +14,36 @@ Set-Content -Path $LogFile -Value "--- IT SUPPORT ACTIVITY SUMMARY: $env:COMPUTE
 Add-Content -Path $LogFile -Value "Technician Session: $(Get-Date)`n"
 
 function Write-Log {
-    param([string]$Action, [string]$Status = "INFO")
+    param(
+        [string]$Message, 
+        [string]$Status = "INFO",
+        [switch]$IsData # Use this to show full output in console
+    )
     $Timestamp = Get-Date -Format "HH:mm:ss"
-    $Line = "[$Timestamp] [$Status] - $Action"
+    $LogLine = "[$Timestamp] [$Status] - $Message"
     
-    # Write to Console for you to see
-    $Color = if ($Status -eq "SUCCESS") { "Green" } elseif ($Status -eq "FAILED") { "Red" } else { "Cyan" }
-    Write-Host $Line -ForegroundColor $Color
+    # 1. Log to File
+    Add-Content -Path $LogFile -Value $LogLine -Encoding UTF8
     
-    # Write to Log File
-    Add-Content -Path $LogFile -Value $Line -Encoding UTF8
+    # 2. Display to Console
+    if ($IsData) {
+        Write-Host "`n>>> DATA REPORT:" -ForegroundColor Yellow
+        Write-Host $Message -ForegroundColor White
+    } else {
+        $Color = if ($Status -eq "SUCCESS") { "Green" } elseif ($Status -eq "FAILED") { "Red" } else { "Cyan" }
+        Write-Host $LogLine -ForegroundColor $Color
+    }
 }
 
 function Show-Menu {
     Write-Host "`n==============================================" -ForegroundColor White
-    Write-Host "   REMOTE SUPPORT MENU (CLEAN LOGGING)" -ForegroundColor White
+    Write-Host "   REMOTE SUPPORT MENU (SMART LOGGING)" -ForegroundColor White
     Write-Host "==============================================" -ForegroundColor White
     Write-Host "1) Network: Flush DNS"
-    Write-Host "2) Repair: Run SFC Scan (Background)"
+    Write-Host "2) Repair: Run SFC Scan (Silent)"
     Write-Host "3) Cleanup: Clear Temp & Recycle Bin"
-    Write-Host "4) Audit: System Info & GPU"
-    Write-Host "5) Check: Pending Reboot"
+    Write-Host "4) Audit: Show System Info & GPU (Visible)"
+    Write-Host "5) Check: Pending Reboot Status"
     Write-Host "Q) Quit and Open Summary"
     Write-Host "=============================================="
 }
@@ -46,21 +55,11 @@ do {
     switch ($choice) {
         '1' {
             Write-Log "Flushing DNS Cache..."
-            try {
-                ipconfig /flushdns | Out-Null
-                Write-Log "DNS Flush" "SUCCESS"
-            } catch {
-                Write-Log "DNS Flush" "FAILED"
-            }
+            try { ipconfig /flushdns | Out-Null; Write-Log "DNS Flush" "SUCCESS" } catch { Write-Log "DNS Flush" "FAILED" }
         }
         '2' {
-            Write-Log "Starting SFC Repair (This runs in background)..."
-            try {
-                sfc /scannow | Out-Null
-                Write-Log "SFC System Repair" "SUCCESS"
-            } catch {
-                Write-Log "SFC System Repair" "FAILED"
-            }
+            Write-Log "Starting SFC Repair (Silent)..."
+            try { sfc /scannow | Out-Null; Write-Log "SFC System Repair" "SUCCESS" } catch { Write-Log "SFC System Repair" "FAILED" }
         }
         '3' {
             Write-Log "Cleaning Temp Files..."
@@ -69,9 +68,7 @@ do {
                 foreach ($path in $tempPaths) { Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue }
                 Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue
                 Write-Log "System Cleanup" "SUCCESS"
-            } catch {
-                Write-Log "System Cleanup" "FAILED"
-            }
+            } catch { Write-Log "System Cleanup" "FAILED" }
         }
         '4' {
             Write-Log "Gathering System Audit..."
@@ -79,17 +76,16 @@ do {
                 $cs = Get-CimInstance Win32_ComputerSystem
                 $serial = (Get-CimInstance Win32_Bios).SerialNumber
                 $gpu = Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name
-                $data = "Model: $($cs.Model) | Serial: $serial | GPU: $gpu"
-                Write-Log "Audit Data: $data" "SUCCESS"
-            } catch {
-                Write-Log "System Audit" "FAILED"
-            }
+                $auditData = "Model: $($cs.Model) | Serial: $serial | GPU: $gpu | RAM: $([math]::Round($cs.TotalPhysicalMemory / 1GB, 2))GB"
+                
+                # Using -IsData shows it in the console and logs it
+                Write-Log -Message $auditData -Status "SUCCESS" -IsData
+            } catch { Write-Log "System Audit" "FAILED" }
         }
         '5' {
-            Write-Log "Checking Pending Reboot..."
             $reboot = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
-            $status = if ($reboot) { "REBOOT REQUIRED" } else { "NO REBOOT NEEDED" }
-            Write-Log "Reboot Status: $status" "SUCCESS"
+            $statusText = if ($reboot) { "REBOOT REQUIRED" } else { "NO REBOOT NEEDED" }
+            Write-Log -Message "Reboot Status: $statusText" -Status "SUCCESS" -IsData
         }
     }
 } while ($choice -ne 'q')
