@@ -1,18 +1,29 @@
-# Master IT Support Toolkit - REMOTE SAFE VERSION
+# Master IT Support Toolkit - REMOTE SAFE with LOGGING
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Setup Log File on Desktop
+$LogFile = "$env:USERPROFILE\Desktop\Support_Log_$(Get-Date -Format 'yyyyMMdd_HHmm').txt"
+"IT Support Session Log - $(Get-Date)" | Out-File -FilePath $LogFile
+"----------------------------------------------" | Out-File -FilePath $LogFile -Append
+
+function Write-Log {
+    param([string]$Message)
+    $Timestamp = Get-Date -Format "HH:mm:ss"
+    "[$Timestamp] $Message" | Out-File -FilePath $LogFile -Append
+    Write-Host $Message -ForegroundColor Cyan
+}
+
 function Show-Menu {
-    Clear-Host
+    Write-Host "`n==============================================" -ForegroundColor Cyan
+    Write-Host "   REMOTE TOOLKIT (LOGGING TO DESKTOP)" -ForegroundColor Cyan
     Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host "   REMOTE SUPPORT TOOLKIT - SESSION: $(Get-Date)" -ForegroundColor Cyan
-    Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host "1) Network: Flush DNS (Safe for Remote)"
-    Write-Host "2) Repair: Run SFC Scan (System File Check)"
-    Write-Host "3) Cleanup: Clear Temp Files & Recycle Bin"
-    Write-Host "4) Full System Audit (Hardware, GPU, IP, RAM)"
-    Write-Host "5) Speed Test: Check Local Link Speed"
-    Write-Host "6) Health: Check Pending Reboot & Battery"
-    Write-Host "7) Display: Check GPU Driver Status"
+    Write-Host "1) Network: Flush DNS (Safe)"
+    Write-Host "2) Repair: Run SFC Scan"
+    Write-Host "3) Cleanup: Clear Temp & Recycle Bin"
+    Write-Host "4) Full System Audit"
+    Write-Host "5) Speed Test: Local Link Speed"
+    Write-Host "6) Health: Pending Reboot & Battery"
+    Write-Host "7) Display: GPU Driver Status"
     Write-Host "Q) Quit"
     Write-Host "=============================================="
 }
@@ -23,58 +34,58 @@ do {
 
     switch ($choice) {
         '1' {
-            Write-Host "Flushing DNS Cache..." -ForegroundColor Yellow
-            ipconfig /flushdns
-            Write-Host "DNS Flush complete. (Connection remains active)" -ForegroundColor Green
-            Pause
+            Write-Log "Action: Flushing DNS..."
+            ipconfig /flushdns | Out-File -FilePath $LogFile -Append
+            Write-Host "Done." -ForegroundColor Green
         }
         '2' {
-            Write-Host "Running SFC Scan. This will not affect your connection..." -ForegroundColor Yellow
-            sfc /scannow
-            Pause
+            Write-Log "Action: Starting SFC Scan..."
+            sfc /scannow | Out-File -FilePath $LogFile -Append
+            Write-Host "Scan Finished. Check log for details." -ForegroundColor Green
         }
         '3' {
-            Write-Host "Cleaning Temp folders..." -ForegroundColor Yellow
+            Write-Log "Action: Cleaning Temp Files..."
             $tempPaths = "$env:TEMP\*", "C:\Windows\Temp\*"
             foreach ($path in $tempPaths) { 
                 Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue 
             }
             Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue
-            Write-Host "Cleanup finished." -ForegroundColor Green
-            Pause
+            "Temp files and Recycle Bin cleared." | Out-File -FilePath $LogFile -Append
+            Write-Host "Cleanup done." -ForegroundColor Green
         }
         '4' {
-            Write-Host "--- System Audit ---" -ForegroundColor Cyan
-            $os = Get-CimInstance Win32_OperatingSystem
-            $cs = Get-CimInstance Win32_ComputerSystem
+            Write-Log "Action: System Audit"
+            $os = Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version
+            $cs = Get-CimInstance Win32_ComputerSystem | Select-Object Model, TotalPhysicalMemory
             $serial = (Get-CimInstance Win32_Bios).SerialNumber
             
-            Write-Host "PC Name:    $($env:COMPUTERNAME)"
-            Write-Host "Model:      $($cs.Model)"
-            Write-Host "Serial:     $serial"
-            Write-Host "RAM:        $([math]::Round($cs.TotalPhysicalMemory / 1GB, 2)) GB"
-            Write-Host "OS:         $($os.Caption)"
-            Write-Host "--------------------" -ForegroundColor Cyan
-            Pause
+            $audit = "PC: $env:COMPUTERNAME | Model: $($cs.Model) | Serial: $serial | OS: $($os.Caption)"
+            $audit | Out-File -FilePath $LogFile -Append
+            Write-Host $audit
         }
         '5' {
-            Write-Host "--- Local Network Speeds ---" -ForegroundColor Cyan
-            Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object Name, LinkSpeed | Format-Table -AutoSize
-            Pause
+            Write-Log "Action: Checking Link Speeds"
+            $adapters = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object Name, LinkSpeed
+            $adapters | Out-File -FilePath $LogFile -Append
+            $adapters | Format-Table | Out-String | Write-Host
         }
         '6' {
-            Write-Host "--- Status Checks ---" -ForegroundColor Cyan
+            Write-Log "Action: Health Checks"
             $reboot = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
-            if ($reboot) { Write-Host "REBOOT REQUIRED: Yes" -ForegroundColor Red } else { Write-Host "REBOOT REQUIRED: No" -ForegroundColor Green }
+            $msg = "Pending Reboot: $reboot"
+            $msg | Out-File -FilePath $LogFile -Append
+            Write-Host $msg
             
-            Write-Host "`n--- Battery Health ---" -ForegroundColor Cyan
-            Get-CimInstance -ClassName Win32_Battery | Select-Object EstimatedChargeRemaining, Status | Format-Table
-            Pause
+            Get-CimInstance -ClassName Win32_Battery | Select-Object EstimatedChargeRemaining, Status | Out-File -FilePath $LogFile -Append
         }
         '7' {
-            Write-Host "--- GPU Driver Info ---" -ForegroundColor Cyan
-            Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, DriverDate, Status | Format-Table -AutoSize
-            Pause
+            Write-Log "Action: GPU Check"
+            $gpu = Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, Status
+            $gpu | Out-File -FilePath $LogFile -Append
+            $gpu | Format-Table | Out-String | Write-Host
         }
     }
 } while ($choice -ne 'q')
+
+Write-Log "Session Ended."
+Write-Host "Log saved to: $LogFile" -ForegroundColor Yellow
