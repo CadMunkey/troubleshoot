@@ -8,10 +8,19 @@ if (!(Test-Path $LogFolder)) { New-Item -Path $LogFolder -ItemType Directory -Fo
 New-Item -Path $LogFile -ItemType File -Force | Out-Null
 "--- REMOTE SESSION LOG: $env:COMPUTERNAME ---" | Out-File -FilePath $LogFile -Encoding UTF8
 
+# Use 'UTF8' (no BOM) for the most reliable Notepad experience
+$Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
+# 1. Create/Reset the file with clean encoding
+[System.IO.File]::WriteAllLines($LogFile, "--- SESSION LOG: $env:COMPUTERNAME ---", $Utf8NoBom)
+
 function Write-Log {
     param([string]$Message)
     $Timestamp = Get-Date -Format "HH:mm:ss"
-    "[$Timestamp] $Message" | Out-File -FilePath $LogFile -Append
+    $FullLine = "[$Timestamp] $Message"
+    
+    # Append to file using the same clean encoding
+    Add-Content -Path $LogFile -Value $FullLine -Encoding UTF8
     Write-Host $Message -ForegroundColor Cyan
 }
 
