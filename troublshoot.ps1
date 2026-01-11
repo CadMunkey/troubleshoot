@@ -1,41 +1,41 @@
 <# 
 .SYNOPSIS
-Remote Support Toolkit - Final Production Version
+Remote Support Toolkit - High-Level Activity Logger
 #>
 
-# 1. FORCE PIPELINE ENCODING (Prevents spaced-out letters in command output)
+# 1. Encoding & Path Setup
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-$PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8'
-
-# 2. Setup Log Folder & File
 $LogFolder = "C:\SupportLogs"
 if (!(Test-Path $LogFolder)) { New-Item -Path $LogFolder -ItemType Directory -Force | Out-Null }
-$LogFile = Join-Path $LogFolder "Support_Log_$(Get-Date -Format 'yyyyMMdd_HHmm').txt"
+$LogFile = Join-Path $LogFolder "Support_Summary_$(Get-Date -Format 'yyyyMMdd_HHmm').txt"
 
 # Create fresh log file
-Set-Content -Path $LogFile -Value "--- IT SUPPORT SESSION: $env:COMPUTERNAME ---" -Encoding UTF8
-Add-Content -Path $LogFile -Value "Started at: $(Get-Date)"
+Set-Content -Path $LogFile -Value "--- IT SUPPORT ACTIVITY SUMMARY: $env:COMPUTERNAME ---" -Encoding UTF8
+Add-Content -Path $LogFile -Value "Technician Session: $(Get-Date)`n"
 
 function Write-Log {
-    param([string]$Message, [switch]$NoConsole)
+    param([string]$Action, [string]$Status = "INFO")
     $Timestamp = Get-Date -Format "HH:mm:ss"
-    Add-Content -Path $LogFile -Value "[$Timestamp] $Message"
-    if (!$NoConsole) { Write-Host $Message -ForegroundColor Cyan }
+    $Line = "[$Timestamp] [$Status] - $Action"
+    
+    # Write to Console for you to see
+    $Color = if ($Status -eq "SUCCESS") { "Green" } elseif ($Status -eq "FAILED") { "Red" } else { "Cyan" }
+    Write-Host $Line -ForegroundColor $Color
+    
+    # Write to Log File
+    Add-Content -Path $LogFile -Value $Line -Encoding UTF8
 }
 
 function Show-Menu {
-    Write-Host "`n==============================================" -ForegroundColor Cyan
-    Write-Host "   REMOTE TOOLKIT (LOGGING TO C:\SupportLogs)" -ForegroundColor Cyan
-    Write-Host "==============================================" -ForegroundColor Cyan
-    Write-Host "1) Network: Flush DNS (Safe)"
-    Write-Host "2) Repair: Run SFC Scan"
+    Write-Host "`n==============================================" -ForegroundColor White
+    Write-Host "   REMOTE SUPPORT MENU (CLEAN LOGGING)" -ForegroundColor White
+    Write-Host "==============================================" -ForegroundColor White
+    Write-Host "1) Network: Flush DNS"
+    Write-Host "2) Repair: Run SFC Scan (Background)"
     Write-Host "3) Cleanup: Clear Temp & Recycle Bin"
-    Write-Host "4) Full System Audit"
-    Write-Host "5) Speed Test: Local Link Speed"
-    Write-Host "6) Health: Pending Reboot & Battery"
-    Write-Host "7) Display: GPU Driver Status"
-    Write-Host "Q) Quit and Open Log"
+    Write-Host "4) Audit: System Info & GPU"
+    Write-Host "5) Check: Pending Reboot"
+    Write-Host "Q) Quit and Open Summary"
     Write-Host "=============================================="
 }
 
@@ -45,47 +45,53 @@ do {
 
     switch ($choice) {
         '1' {
-            Write-Log "Action: Flushing DNS..."
-            # Using Out-String forces the external command to become a clean string
-            ipconfig /flushdns | Out-String | Add-Content -Path $LogFile
+            Write-Log "Flushing DNS Cache..."
+            try {
+                ipconfig /flushdns | Out-Null
+                Write-Log "DNS Flush" "SUCCESS"
+            } catch {
+                Write-Log "DNS Flush" "FAILED"
+            }
         }
         '2' {
-            Write-Log "Action: Starting SFC Scan..."
-            sfc /scannow | Out-String | Add-Content -Path $LogFile
+            Write-Log "Starting SFC Repair (This runs in background)..."
+            try {
+                sfc /scannow | Out-Null
+                Write-Log "SFC System Repair" "SUCCESS"
+            } catch {
+                Write-Log "SFC System Repair" "FAILED"
+            }
         }
         '3' {
-            Write-Log "Action: Cleaning Temp Files..."
-            $tempPaths = "$env:TEMP\*", "C:\Windows\Temp\*"
-            foreach ($path in $tempPaths) { Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue }
-            Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue
-            Write-Log "Cleanup completed."
+            Write-Log "Cleaning Temp Files..."
+            try {
+                $tempPaths = "$env:TEMP\*", "C:\Windows\Temp\*"
+                foreach ($path in $tempPaths) { Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue }
+                Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue
+                Write-Log "System Cleanup" "SUCCESS"
+            } catch {
+                Write-Log "System Cleanup" "FAILED"
+            }
         }
         '4' {
-            Write-Log "Action: System Audit"
-            $cs = Get-CimInstance Win32_ComputerSystem
-            $serial = (Get-CimInstance Win32_Bios).SerialNumber
-            $audit = "Model: $($cs.Model) | Serial: $serial | RAM: $([math]::Round($cs.TotalPhysicalMemory / 1GB, 2))GB"
-            Write-Log $audit
+            Write-Log "Gathering System Audit..."
+            try {
+                $cs = Get-CimInstance Win32_ComputerSystem
+                $serial = (Get-CimInstance Win32_Bios).SerialNumber
+                $gpu = Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name
+                $data = "Model: $($cs.Model) | Serial: $serial | GPU: $gpu"
+                Write-Log "Audit Data: $data" "SUCCESS"
+            } catch {
+                Write-Log "System Audit" "FAILED"
+            }
         }
         '5' {
-            Write-Log "Action: Checking Link Speeds"
-            Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object Name, LinkSpeed | Out-String | Add-Content -Path $LogFile
-        }
-        '6' {
-            Write-Log "Action: Health Checks"
+            Write-Log "Checking Pending Reboot..."
             $reboot = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
-            Write-Log "Pending Reboot: $reboot"
-            Get-CimInstance -ClassName Win32_Battery | Select-Object EstimatedChargeRemaining, Status | Out-String | Add-Content -Path $LogFile
-        }
-        '7' {
-            Write-Log "Action: GPU Check"
-            Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, Status | Out-String | Add-Content -Path $LogFile
+            $status = if ($reboot) { "REBOOT REQUIRED" } else { "NO REBOOT NEEDED" }
+            Write-Log "Reboot Status: $status" "SUCCESS"
         }
     }
 } while ($choice -ne 'q')
 
-# Final Log check and open
-if (Test-Path $LogFile) { 
-    Write-Host "Log saved to $LogFile" -ForegroundColor Yellow
-    notepad.exe $LogFile 
-}
+if (Test-Path $LogFile) { notepad.exe $LogFile }
