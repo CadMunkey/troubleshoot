@@ -103,6 +103,60 @@ do {
                 Write-Log "Network Connectivity Test" "FAILED" 
             }
         }
+        '7' {
+            Write-Log "Analyzing Event Logs for Errors (Last 24 Hours)..."
+            try {
+                $last24Hours = (Get-Date).AddDays(-1)
+                
+                # Fetch System Errors
+                $sysErrors = Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$last24Hours} -ErrorAction SilentlyContinue
+                # Fetch App Errors
+                $appErrors = Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=$last24Hours} -ErrorAction SilentlyContinue
+                
+                $summary = "System Errors: $($sysErrors.Count) | App Errors: $($appErrors.Count)"
+                
+                # Show in console and log
+                Write-Log -Message $summary -Status "SUCCESS" -IsData
+                
+                if ($sysErrors.Count -gt 0) {
+                    Write-Host "`nRecent System Error Examples:" -ForegroundColor Gray
+                    $sysErrors | Select-Object -First 3 | ForEach-Object { Write-Host "- $($_.Message.SubString(0,80))..." -ForegroundColor Gray }
+                }
+            } catch {
+                Write-Log "Event Log Analysis" "FAILED"
+            }
+        }
+        '8' {
+            Write-Log "Searching for recent Blue Screen (BSOD) codes..."
+            try {
+                # Look for the last crash event
+                $crash = Get-WinEvent -FilterHashtable @{LogName='System'; ID=1001} -MaxEvents 1 -ErrorAction SilentlyContinue
+                
+                if ($crash) {
+                    # Extract the BugCheck code from the message
+                    $msg = $crash.Message
+                    $code = if ($msg -match "0x[0-9a-fA-F]+") { $matches[0] } else { "Unknown" }
+                    
+                    # Dictionary of common meanings
+                    $meaning = switch ($code) {
+                        "0x0000000A" { "IRQL_NOT_LESS_OR_EQUAL (Likely a bad Driver)" }
+                        "0x0000003B" { "SYSTEM_SERVICE_EXCEPTION (Driver or System File)" }
+                        "0x000000D1" { "DRIVER_IRQL_NOT_LESS_OR_EQUAL (Network/WiFi Driver)" }
+                        "0x0000001A" { "MEMORY_MANAGEMENT (Faulty RAM stick)" }
+                        "0x0000007B" { "INACCESSIBLE_BOOT_DEVICE (HDD/SSD or Controller issue)" }
+                        "0x00000124" { "WHEA_UNCORRECTABLE_ERROR (Physical Hardware Failure)" }
+                        Default { "Specialized Code - Recommend searching Microsoft Learn for $code" }
+                    }
+
+                    $report = "Last Crash Detected: $code | Meaning: $meaning"
+                    Write-Log -Message $report -Status "SUCCESS" -IsData
+                } else {
+                    Write-Log -Message "No Blue Screen events found in recent logs." -Status "SUCCESS" -IsData
+                }
+            } catch {
+                Write-Log "BSOD Analysis" "FAILED"
+            }
+        }
     }
 } while ($choice -ne 'q')
 
