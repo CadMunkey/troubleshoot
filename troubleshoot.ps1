@@ -1,6 +1,6 @@
 <# 
 .SYNOPSIS
-Remote Support Toolkit - Fixed Option 6 & Encoding
+Remote Support Toolkit - Production Ready (Fixed Braces & Full Menu)
 #>
 
 # 1. Encoding & Path Setup
@@ -43,6 +43,8 @@ function Show-Menu {
     Write-Host "4) Audit: Show System Info & GPU (Visible)"
     Write-Host "5) Check: Pending Reboot Status"
     Write-Host "6) Check: Ping and DNS Test"
+    Write-Host "7) Events: Analyze Error Logs (24h)"
+    Write-Host "8) BSOD: Analyze Last Blue Screen"
     Write-Host "Q) Quit and Open Summary"
     Write-Host "=============================================="
 }
@@ -89,52 +91,35 @@ do {
             try {
                 $ipToPing = "8.8.8.8"
                 $urlToPing = "www.bbc.co.uk"
-                
-                # Test connection returns True/False
                 $pingIP = Test-Connection -ComputerName $ipToPing -Count 2 -Quiet
                 $pingURL = Test-Connection -ComputerName $urlToPing -Count 2 -Quiet
-                
                 $resIP = if($pingIP) {"SUCCESS"} else {"FAILED"}
                 $resURL = if($pingURL) {"SUCCESS"} else {"FAILED"}
-                
                 $pingResults = "Ping 8.8.8.8: $resIP | Ping BBC: $resURL"
                 Write-Log -Message $pingResults -Status "SUCCESS" -IsData
-            } catch {Write-Log "Network Connectivity -Test" "FAILED"}
+            } catch { Write-Log "Network Test" "FAILED" }
         }
         '7' {
             Write-Log "Analyzing Event Logs for Errors (Last 24 Hours)..."
             try {
                 $last24Hours = (Get-Date).AddDays(-1)
-                
-                # Fetch System Errors
                 $sysErrors = Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$last24Hours} -ErrorAction SilentlyContinue
-                # Fetch App Errors
                 $appErrors = Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=$last24Hours} -ErrorAction SilentlyContinue
-                
                 $summary = "System Errors: $($sysErrors.Count) | App Errors: $($appErrors.Count)"
-                
-                # Show in console and log
                 Write-Log -Message $summary -Status "SUCCESS" -IsData
-                
                 if ($sysErrors.Count -gt 0) {
                     Write-Host "`nRecent System Error Examples:" -ForegroundColor Gray
                     $sysErrors | Select-Object -First 3 | ForEach-Object { Write-Host "- $($_.Message.SubString(0,80))..." -ForegroundColor Gray }
                 }
-            } catch {Write-Log "Event Log Analysis" "FAILED"}
+            } catch { Write-Log "Event Log Analysis" "FAILED" }
         }
-        
         '8' {
             Write-Log "Searching for recent Blue Screen (BSOD) codes..."
             try {
-                # Look for the last crash event
                 $crash = Get-WinEvent -FilterHashtable @{LogName='System'; ID=1001} -MaxEvents 1 -ErrorAction SilentlyContinue
-                
                 if ($crash) {
-                    # Extract the BugCheck code from the message
                     $msg = $crash.Message
                     $code = if ($msg -match "0x[0-9a-fA-F]+") { $matches[0] } else { "Unknown" }
-                    
-                    # Dictionary of common meanings
                     $meaning = switch ($code) {
                         "0x0000000A" { "IRQL_NOT_LESS_OR_EQUAL (Likely a bad Driver)" }
                         "0x0000003B" { "SYSTEM_SERVICE_EXCEPTION (Driver or System File)" }
@@ -142,17 +127,13 @@ do {
                         "0x0000001A" { "MEMORY_MANAGEMENT (Faulty RAM stick)" }
                         "0x0000007B" { "INACCESSIBLE_BOOT_DEVICE (HDD/SSD or Controller issue)" }
                         "0x00000124" { "WHEA_UNCORRECTABLE_ERROR (Physical Hardware Failure)" }
-                        Default { "Specialized Code - Recommend searching Microsoft Learn for $code" }
+                        Default { "Specialized Code: $code" }
                     }
-
-                    $report = "Last Crash Detected: $code | Meaning: $meaning"
-                    Write-Log -Message $report -Status "SUCCESS" -IsData
+                    Write-Log -Message "Last Crash: $code | Meaning: $meaning" -Status "SUCCESS" -IsData
                 } else {
-                    Write-Log -Message "No Blue Screen events found in recent logs." -Status "SUCCESS" -IsData
+                    Write-Log -Message "No Blue Screen events found." -Status "SUCCESS" -IsData
                 }
-            } catch {
-                Write-Log "BSOD Analysis" "FAILED"
-            }
+            } catch { Write-Log "BSOD Analysis" "FAILED" }
         }
     }
 } while ($choice -ne 'q')
