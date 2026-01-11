@@ -88,7 +88,9 @@ do {
             $statusText = if ($reboot) { "REBOOT REQUIRED" } else { "NO REBOOT NEEDED" }
             Write-Log -Message "Reboot Status: $statusText" -Status "SUCCESS" -IsData
         }
-        '6' try {
+        '6' {
+            Write-Log "Gathering System Audit..."
+            try {
                 $ipToPing="8.8.8.8"
                 $urltoPing= "http://www.bbc.co.uk"
                 ping $ipToPing
