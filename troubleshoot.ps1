@@ -44,6 +44,7 @@ function Show-Menu {
     Write-Host "3) Cleanup: Clear Temp & Recycle Bin"
     Write-Host "4) Audit: Show System Info & GPU (Visible)"
     Write-Host "5) Check: Pending Reboot Status"
+    Write-Host "6) Check: Ping and DNS"
     Write-Host "Q) Quit and Open Summary"
     Write-Host "=============================================="
 }
@@ -86,6 +87,19 @@ do {
             $reboot = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
             $statusText = if ($reboot) { "REBOOT REQUIRED" } else { "NO REBOOT NEEDED" }
             Write-Log -Message "Reboot Status: $statusText" -Status "SUCCESS" -IsData
+        }
+        '6' try {
+                $ipToPing="8.8.8.8"
+                $urltoPing= "http://www.bbc.co.uk"
+                ping $ipToPing
+                ping $urlToPing
+                $auditData = "Pinged: $ipToPing | Pinged: $urlToPing"
+                
+                # Using -IsData shows it in the console and logs it
+                Write-Log -Message $auditData -Status "SUCCESS" -IsData
+            } catch { Write-Log "System Audit" "FAILED" }{
+
+            
         }
     }
 } while ($choice -ne 'q')
