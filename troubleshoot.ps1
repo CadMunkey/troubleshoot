@@ -1,57 +1,50 @@
 <# 
 .SYNOPSIS
-Remote Support Toolkit - Final Production Build
-Features: Modular design, C:\ Logging, BSOD Analysis, Disk Health, and Uptime.
+Complete Remote Support Toolkit - All Functions Included
+Features: Logging, Audit, Repairs, Networking, Event Analysis, and Disk Health.
 #>
 
-# --- 1. GLOBAL SETUP ---
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# --- 1. GLOBAL SETUP & ENCODING ---
 $LogFolder = "C:\SupportLogs"
 if (!(Test-Path $LogFolder)) { New-Item -Path $LogFolder -ItemType Directory -Force | Out-Null }
-$LogFile = Join-Path $LogFolder "Support_Summary_$(Get-Date -Format 'yyyyMMdd_HHmm').txt"
+$LogFile = Join-Path $LogFolder "Support_Final_Summary.txt"
 
-# Force UTF8 for all file operations
-$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-$PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8'
+# Ensure clean UTF8 encoding for the log file
+"--- IT SUPPORT SESSION: $env:COMPUTERNAME ---" | Out-File -FilePath $LogFile -Encoding UTF8
+"Started: $(Get-Date)`n" | Out-File -FilePath $LogFile -Append -Encoding UTF8
 
-Set-Content -Path $LogFile -Value "--- IT SUPPORT ACTIVITY SUMMARY: $env:COMPUTERNAME ---"
-Add-Content -Path $LogFile -Value "Technician Session: $(Get-Date)`n"
-
-# --- 2. CORE LOGGING FUNCTION ---
 function Write-Log {
     param([string]$Message, [string]$Status = "INFO", [switch]$IsData)
-    $Timestamp = Get-Date -Format "HH:mm:ss"
-    $LogLine = "[$Timestamp] [$Status] - $Message"
-    Add-Content -Path $LogFile -Value $LogLine
+    $Time = Get-Date -Format "HH:mm:ss"
+    $Line = "[$Time] [$Status] - $Message"
+    $Line | Out-File -FilePath $LogFile -Append -Encoding UTF8
     
     if ($IsData) {
         Write-Host "`n>>> DATA REPORT:" -ForegroundColor Yellow
         Write-Host $Message -ForegroundColor White
     } else {
-        $Color = if ($Status -eq "SUCCESS") { "Green" } elseif ($Status -eq "FAILED") { "Red" } else { "Cyan" }
-        Write-Host $LogLine -ForegroundColor $Color
+        $Col = if($Status -eq "SUCCESS"){"Green"}elseif($Status -eq "FAILED"){"Red"}else{"Cyan"}
+        Write-Host $Line -ForegroundColor $Col
     }
 }
 
-# --- 3. THE TOOLBOX FUNCTIONS ---
+# --- 2. THE TOOLSET ---
 
 function Invoke-DnsFlush {
-    Write-Log "Flushing DNS Cache..."
-    try { ipconfig /flushdns | Out-Null; Write-Log "DNS Flush" "SUCCESS" } 
-    catch { Write-Log "DNS Flush" "FAILED" }
+    Write-Log "Flushing DNS..."
+    try { ipconfig /flushdns | Out-Null; Write-Log "DNS Flush" "SUCCESS" } catch { Write-Log "DNS Flush" "FAILED" }
 }
 
 function Invoke-SfcRepair {
-    Write-Log "Starting SFC Repair (Background)..."
-    try { sfc /scannow | Out-Null; Write-Log "SFC System Repair" "SUCCESS" } 
-    catch { Write-Log "SFC System Repair" "FAILED" }
+    Write-Log "Starting SFC (Silent)..."
+    try { sfc /scannow | Out-Null; Write-Log "SFC Repair" "SUCCESS" } catch { Write-Log "SFC Repair" "FAILED" }
 }
 
-function Invoke-SystemCleanup {
+function Invoke-Cleanup {
     Write-Log "Cleaning Temp Files..."
     try {
-        $tempPaths = "$env:TEMP\*", "C:\Windows\Temp\*"
-        foreach ($path in $tempPaths) { Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue }
+        $paths = "$env:TEMP\*", "C:\Windows\Temp\*"
+        foreach ($p in $paths) { Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue }
         Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue
         Write-Log "System Cleanup" "SUCCESS"
     } catch { Write-Log "System Cleanup" "FAILED" }
@@ -60,113 +53,95 @@ function Invoke-SystemCleanup {
 function Get-SystemAudit {
     Write-Log "Gathering System Audit..."
     try {
-        $cs = Get-CimInstance Win32_ComputerSystem
-        $serial = (Get-CimInstance Win32_Bios).SerialNumber
+        $comp = Get-CimInstance Win32_ComputerSystem
+        $bios = Get-CimInstance Win32_Bios
         $gpu = Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name
-        $auditData = "Model: $($cs.Model) | Serial: $serial | GPU: $gpu | RAM: $([math]::Round($cs.TotalPhysicalMemory / 1GB, 2))GB"
-        Write-Log -Message $auditData -Status "SUCCESS" -IsData
-    } catch { Write-Log "System Audit" "FAILED" }
+        $data = "Model: $($comp.Model) | Serial: $($bios.SerialNumber) | RAM: $([math]::Round($comp.TotalPhysicalMemory / 1GB))GB | GPU: $gpu"
+        Write-Log -Message $data -Status "SUCCESS" -IsData
+    } catch { Write-Log "Audit" "FAILED" }
 }
 
 function Check-RebootStatus {
-    $reboot = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
-    $statusText = if ($reboot) { "REBOOT REQUIRED" } else { "NO REBOOT NEEDED" }
-    Write-Log -Message "Reboot Status: $statusText" -Status "SUCCESS" -IsData
+    $r = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
+    $msg = if($r){"REBOOT REQUIRED"}else{"NO REBOOT NEEDED"}
+    Write-Log -Message "Reboot Status: $msg" -Status "SUCCESS" -IsData
 }
 
-function Test-NetworkHealth {
-    Write-Log "Testing Network Connectivity..."
+function Test-Network {
+    Write-Log "Testing Pings..."
     try {
-        $pingIP = Test-Connection -ComputerName "8.8.8.8" -Count 2 -Quiet
-        $pingURL = Test-Connection -ComputerName "www.google.com" -Count 2 -Quiet
-        $res = "Ping 8.8.8.8: $(if($pingIP){'OK'}else{'FAIL'}) | Ping Google: $(if($pingURL){'OK'}else{'FAIL'})"
+        $p1 = Test-Connection -ComputerName "8.8.8.8" -Count 2 -Quiet
+        $p2 = Test-Connection -ComputerName "www.bbc.co.uk" -Count 2 -Quiet
+        $res = "IP Ping: $(if($p1){'OK'}else{'FAIL'}) | DNS Ping: $(if($p2){'OK'}else{'FAIL'})"
         Write-Log -Message $res -Status "SUCCESS" -IsData
     } catch { Write-Log "Network Test" "FAILED" }
 }
 
-function Analyze-EventLogs {
-    Write-Log "Analyzing Event Logs (Last 24 Hours)..."
+function Analyze-Events {
+    Write-Log "Checking Errors (Last 24h)..."
     try {
-        $last24 = (Get-Date).AddDays(-1)
-        $sys = (Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$last24} -ErrorAction SilentlyContinue).Count
-        $app = (Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=$last24} -ErrorAction SilentlyContinue).Count
+        $time = (Get-Date).AddDays(-1)
+        $sys = (Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$time} -ErrorAction SilentlyContinue).Count
+        $app = (Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=$time} -ErrorAction SilentlyContinue).Count
         Write-Log -Message "System Errors: $sys | App Errors: $app" -Status "SUCCESS" -IsData
-    } catch { Write-Log "Event Log Analysis" "FAILED" }
+    } catch { Write-Log "Event Analysis" "FAILED" }
 }
 
 function Analyze-Bsod {
-    Write-Log "Searching for recent BSOD codes..."
+    Write-Log "Checking for BSOD..."
     try {
         $crash = Get-WinEvent -FilterHashtable @{LogName='System'; ID=1001} -MaxEvents 1 -ErrorAction SilentlyContinue
         if ($crash -and ($crash.Message -match "0x[0-9a-fA-F]+")) {
-            $code = $matches[0]
-            Write-Log -Message "Last Crash Code: $code" -Status "SUCCESS" -IsData
-        } else { Write-Log "No recent BSOD found." "SUCCESS" }
+            Write-Log -Message "Last Crash Code: $($matches[0])" -Status "SUCCESS" -IsData
+        } else { Write-Log "No BSOD detected." "SUCCESS" }
     } catch { Write-Log "BSOD Analysis" "FAILED" }
 }
 
-function Check-DiskHealth {
-    Write-Log "Checking S.M.A.R.T. Status..."
+function Check-Disk {
+    Write-Log "Checking SMART Status..."
     try {
-        $diskHealth = Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue
-        if ($null -eq $diskHealth) {
-            Write-Log "No S.M.A.R.T. data available (Likely a Virtual Machine)." "INFO"
-        } else {
-            foreach ($disk in $diskHealth) {
-                $status = if ($disk.PredictFailure) { "FAILING" } else { "HEALTHY" }
-                Write-Log -Message "Disk Status: $status" -Status (if($disk.PredictFailure){"FAILED"}else{"SUCCESS"}) -IsData
-            }
+        $d = Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue
+        if ($null -eq $d) { Write-Log "No SMART data available." }
+        else {
+            $stat = if($d.PredictFailure){"FAILING"}else{"HEALTHY"}
+            Write-Log "Disk Health: $stat" (if($d.PredictFailure){"FAILED"}else{"SUCCESS"}) -IsData
         }
-    } catch { Write-Log "Disk Health Check" "FAILED" }
+    } catch { Write-Log "Disk Check" "FAILED" }
 }
 
 function Get-UserUptime {
-    Write-Log "Checking User Sessions and Uptime..."
+    Write-Log "Checking Uptime & Users..."
     try {
         $os = Get-CimInstance Win32_OperatingSystem
-        $uptime = (Get-Date) - $os.LastBootUpTime
-        $uptimeString = "$($uptime.Days) Days, $($uptime.Hours) Hours, $($uptime.Minutes) Minutes"
-        
-        # Fixed -Unique logic
-        $userObjects = Get-CimInstance Win32_LogonSession | Get-CimAssociatedInstance -ResultClassName Win32_UserAccount
-        $uniqueUsers = $userObjects.Name | Select-Object -Unique
-        $userList = $uniqueUsers -join ", "
-        
-        $report = "System Uptime: $uptimeString | Logged Users: $userList"
-        Write-Log -Message $report -Status "SUCCESS" -IsData
-    } catch { Write-Log "User/Uptime Check" "FAILED" }
+        $up = (Get-Date) - $os.LastBootUpTime
+        $users = (Get-CimInstance Win32_LogonSession | Get-CimAssociatedInstance -ResultClassName Win32_UserAccount).Name | Select-Object -Unique
+        $data = "Uptime: $($up.Days)d $($up.Hours)h | Users: $($users -join ', ')"
+        Write-Log -Message $data -Status "SUCCESS" -IsData
+    } catch { Write-Log "Uptime Check" "FAILED" }
 }
 
-function Find-LargeFiles {
-    Write-Log "Scanning for Large Files (>500MB) in User Profile..."
+function Find-BigFiles {
+    Write-Log "Scanning User Profile for files > 500MB..."
     try {
-        $userProfile = $env:USERPROFILE
-        $bigFiles = Get-ChildItem -Path $userProfile -Recurse -File -ErrorAction SilentlyContinue | 
-                    Where-Object { $_.Length -gt 500MB } | 
-                    Sort-Object Length -Descending | 
-                    Select-Object -First 5
-        
-        if ($bigFiles) {
-            foreach ($file in $bigFiles) {
-                $sizeGB = [math]::Round($file.Length / 1GB, 2)
-                Write-Log -Message "Found: $($file.Name) ($sizeGB GB) in $($file.DirectoryName)" -Status "INFO" -IsData
-            }
-        } else {
-            Write-Log "No files larger than 500MB found in user profile." "SUCCESS"
-        }
-    } catch { Write-Log "Large File Scan" "FAILED" }
+        $files = Get-ChildItem -Path $env:USERPROFILE -Recurse -File -ErrorAction SilentlyContinue | 
+                 Where-Object { $_.Length -gt 500MB } | Sort-Object Length -Descending | Select-Object -First 3
+        if($files){
+            foreach($f in $files){ Write-Log "Found: $($f.Name) ($([math]::Round($f.Length/1GB,2))GB)" "INFO" -IsData }
+        } else { Write-Log "No large files found." "SUCCESS" }
+    } catch { Write-Log "File Scan" "FAILED" }
 }
 
-# --- 4. THE MENU SYSTEM ---
+# --- 3. MENU SYSTEM ---
+
 function Show-Menu {
     Write-Host "`n==================================================" -ForegroundColor White
-    Write-Host "      REMOTE SUPPORT TOOLKIT - MODULAR V3" -ForegroundColor Cyan
+    Write-Host "      REMOTE SUPPORT TOOLKIT - FULL BUILD" -ForegroundColor Cyan
     Write-Host "==================================================" -ForegroundColor White
-    Write-Host "1) Flush DNS              7) Event Errors (24h)"
-    Write-Host "2) SFC Repair             8) BSOD Analysis"
-    Write-Host "3) System Cleanup         9) Disk Health (SMART)"
-    Write-Host "4) System Audit          10) User & Uptime"
-    Write-Host "5) Reboot Status         11) Large File Scan"
+    Write-Host "1) Flush DNS          7) Event Errors (24h)"
+    Write-Host "2) SFC Repair         8) BSOD Analysis"
+    Write-Host "3) System Cleanup     9) Disk Health (SMART)"
+    Write-Host "4) System Audit      10) User & Uptime"
+    Write-Host "5) Reboot Status     11) Large File Scan"
     Write-Host "6) Ping Test"
     Write-Host "--------------------------------------------------"
     Write-Host "Q) Quit and Open Summary Log"
@@ -179,15 +154,15 @@ do {
     switch ($choice) {
         '1' { Invoke-DnsFlush }
         '2' { Invoke-SfcRepair }
-        '3' { Invoke-SystemCleanup }
+        '3' { Invoke-Cleanup }
         '4' { Get-SystemAudit }
         '5' { Check-RebootStatus }
-        '6' { Test-NetworkHealth }
-        '7' { Analyze-EventLogs }
+        '6' { Test-Network }
+        '7' { Analyze-Events }
         '8' { Analyze-Bsod }
-        '9' { Check-DiskHealth }
+        '9' { Check-Disk }
         '10' { Get-UserUptime }
-        '11' { Find-LargeFiles }
+        '11' { Find-BigFiles }
     }
 } while ($choice -ne 'q')
 
