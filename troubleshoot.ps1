@@ -1,6 +1,7 @@
 <# 
 .SYNOPSIS
-Remote Support Toolkit - Production V2 (Modular & Safe)
+Remote Support Toolkit - Final Production Build
+Features: Modular design, C:\ Logging, BSOD Analysis, Disk Health, and Uptime.
 #>
 
 # --- 1. GLOBAL SETUP ---
@@ -9,7 +10,11 @@ $LogFolder = "C:\SupportLogs"
 if (!(Test-Path $LogFolder)) { New-Item -Path $LogFolder -ItemType Directory -Force | Out-Null }
 $LogFile = Join-Path $LogFolder "Support_Summary_$(Get-Date -Format 'yyyyMMdd_HHmm').txt"
 
-Set-Content -Path $LogFile -Value "--- IT SUPPORT ACTIVITY SUMMARY: $env:COMPUTERNAME ---" -Encoding UTF8
+# Force UTF8 for all file operations
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+$PSDefaultParameterValues['Add-Content:Encoding'] = 'utf8'
+
+Set-Content -Path $LogFile -Value "--- IT SUPPORT ACTIVITY SUMMARY: $env:COMPUTERNAME ---"
 Add-Content -Path $LogFile -Value "Technician Session: $(Get-Date)`n"
 
 # --- 2. CORE LOGGING FUNCTION ---
@@ -17,7 +22,7 @@ function Write-Log {
     param([string]$Message, [string]$Status = "INFO", [switch]$IsData)
     $Timestamp = Get-Date -Format "HH:mm:ss"
     $LogLine = "[$Timestamp] [$Status] - $Message"
-    Add-Content -Path $LogFile -Value $LogLine -Encoding UTF8
+    Add-Content -Path $LogFile -Value $LogLine
     
     if ($IsData) {
         Write-Host "`n>>> DATA REPORT:" -ForegroundColor Yellow
@@ -28,7 +33,7 @@ function Write-Log {
     }
 }
 
-# --- 3. THE TOOLBOX ---
+# --- 3. THE TOOLBOX FUNCTIONS ---
 
 function Invoke-DnsFlush {
     Write-Log "Flushing DNS Cache..."
@@ -114,7 +119,6 @@ function Check-DiskHealth {
         }
     } catch { Write-Log "Disk Health Check" "FAILED" }
 }
-# --- NEW FUNCTIONS TO ADD TO YOUR TOOLBOX SECTION ---
 
 function Get-UserUptime {
     Write-Log "Checking User Sessions and Uptime..."
@@ -123,8 +127,10 @@ function Get-UserUptime {
         $uptime = (Get-Date) - $os.LastBootUpTime
         $uptimeString = "$($uptime.Days) Days, $($uptime.Hours) Hours, $($uptime.Minutes) Minutes"
         
-        $users = Get-CimInstance Win32_LogonSession | Get-CimAssociatedInstance -ResultClassName Win32_UserAccount
-        $userList = ($users.Name -unique) -join ", "
+        # Fixed -Unique logic
+        $userObjects = Get-CimInstance Win32_LogonSession | Get-CimAssociatedInstance -ResultClassName Win32_UserAccount
+        $uniqueUsers = $userObjects.Name | Select-Object -Unique
+        $userList = $uniqueUsers -join ", "
         
         $report = "System Uptime: $uptimeString | Logged Users: $userList"
         Write-Log -Message $report -Status "SUCCESS" -IsData
@@ -151,25 +157,20 @@ function Find-LargeFiles {
     } catch { Write-Log "Large File Scan" "FAILED" }
 }
 
-# --- UPDATE YOUR MENU ---
-# 10) User & Uptime        11) Large File Scan
-
-# --- UPDATE YOUR SWITCH ---
-# '10' { Get-UserUptime }
-# '11' { Find-LargeFiles }
-
 # --- 4. THE MENU SYSTEM ---
 function Show-Menu {
-    Write-Host "`n==============================================" -ForegroundColor White
-    Write-Host "   REMOTE SUPPORT TOOLKIT (MODULAR V2)" -ForegroundColor Cyan
-    Write-Host "==============================================" -ForegroundColor White
-    Write-Host "1) Flush DNS              5)  Reboot Status"
-    Write-Host "2) SFC Repair             6)  Ping Test"
-    Write-Host "3) System Cleanup         7)  Event Errors"
-    Write-Host "4) System Audit           8)  BSOD Analysis"
-    Write-Host "9) Disk Health (SMART)    10) Check Large Files"
-    Write-Host "Q) Quit and Open Summary"
-    Write-Host "=============================================="
+    Write-Host "`n==================================================" -ForegroundColor White
+    Write-Host "      REMOTE SUPPORT TOOLKIT - MODULAR V3" -ForegroundColor Cyan
+    Write-Host "==================================================" -ForegroundColor White
+    Write-Host "1) Flush DNS              7) Event Errors (24h)"
+    Write-Host "2) SFC Repair             8) BSOD Analysis"
+    Write-Host "3) System Cleanup         9) Disk Health (SMART)"
+    Write-Host "4) System Audit          10) User & Uptime"
+    Write-Host "5) Reboot Status         11) Large File Scan"
+    Write-Host "6) Ping Test"
+    Write-Host "--------------------------------------------------"
+    Write-Host "Q) Quit and Open Summary Log"
+    Write-Host "=================================================="
 }
 
 do {
@@ -185,7 +186,8 @@ do {
         '7' { Analyze-EventLogs }
         '8' { Analyze-Bsod }
         '9' { Check-DiskHealth }
-        '10' { Find-LargeFiles }
+        '10' { Get-UserUptime }
+        '11' { Find-LargeFiles }
     }
 } while ($choice -ne 'q')
 
