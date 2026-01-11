@@ -99,9 +99,7 @@ do {
                 
                 $pingResults = "Ping 8.8.8.8: $resIP | Ping BBC: $resURL"
                 Write-Log -Message $pingResults -Status "SUCCESS" -IsData
-            } catch { 
-                Write-Log "Network Connectivity Test" "FAILED" 
-            }
+            } catch {Write-Log "Network Connectivity -Test" "FAILED"}
         }
         '7' {
             Write-Log "Analyzing Event Logs for Errors (Last 24 Hours)..."
@@ -122,10 +120,9 @@ do {
                     Write-Host "`nRecent System Error Examples:" -ForegroundColor Gray
                     $sysErrors | Select-Object -First 3 | ForEach-Object { Write-Host "- $($_.Message.SubString(0,80))..." -ForegroundColor Gray }
                 }
-            } catch {
-                Write-Log "Event Log Analysis" "FAILED"
-            }
+            } catch {Write-Log "Event Log Analysis" "FAILED"}
         }
+        
         '8' {
             Write-Log "Searching for recent Blue Screen (BSOD) codes..."
             try {
