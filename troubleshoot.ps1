@@ -71,7 +71,7 @@ function Test-Network {
     Write-Log "Testing Pings..."
     try {
         $p1 = Test-Connection -ComputerName "8.8.8.8" -Count 2 -Quiet
-        $p2 = Test-Connection -ComputerName "www.bbc.co.uk" -Count 2 -Quiet
+        $p2 = Test-Connection -ComputerName "www.google.com" -Count 2 -Quiet
         $res = "IP Ping: $(if($p1){'OK'}else{'FAIL'}) | DNS Ping: $(if($p2){'OK'}else{'FAIL'})"
         Write-Log -Message $res -Status "SUCCESS" -IsData
     } catch { Write-Log "Network Test" "FAILED" }
@@ -114,8 +114,13 @@ function Get-UserUptime {
     try {
         $os = Get-CimInstance Win32_OperatingSystem
         $up = (Get-Date) - $os.LastBootUpTime
-        $users = (Get-CimInstance Win32_LogonSession | Get-CimAssociatedInstance -ResultClassName Win32_UserAccount).Name | Select-Object -Unique
-        $data = "Uptime: $($up.Days)d $($up.Hours)h | Users: $($users -join ', ')"
+        
+        # Fixed logic for wider compatibility
+        $allUsers = Get-CimInstance Win32_LogonSession | Get-CimAssociatedInstance -ResultClassName Win32_UserAccount
+        $userNames = $allUsers.Name | Select-Object -Unique
+        $userString = $userNames -join ", "
+        
+        $data = "Uptime: $($up.Days)d $($up.Hours)h | Users: $userString"
         Write-Log -Message $data -Status "SUCCESS" -IsData
     } catch { Write-Log "Uptime Check" "FAILED" }
 }
@@ -142,7 +147,7 @@ function Show-Menu {
     Write-Host "3) System Cleanup     9) Disk Health (SMART)"
     Write-Host "4) System Audit      10) User & Uptime"
     Write-Host "5) Reboot Status     11) Large File Scan"
-    Write-Host "6) Ping Test"
+    Write-Host "6) Test Connectivity"
     Write-Host "--------------------------------------------------"
     Write-Host "Q) Quit and Open Summary Log"
     Write-Host "=================================================="
