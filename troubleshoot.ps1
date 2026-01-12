@@ -136,6 +136,29 @@ function Find-BigFiles {
     } catch { Write-Log "File Scan" "FAILED" }
 }
 
+function Update-NvidiaDriver {
+    Write-Log "Starting NVIDIA Silent Update..."
+    try {
+        $SearchUrl = "https://www.nvidia.com/Download/processFind.aspx?psid=101&pfid=845&osid=57&lid=1&whql=1&dtcid=1"
+        $Page = Invoke-WebRequest -Uri $SearchUrl -UseBasicParsing -ErrorAction Stop
+
+        if ($Page.Content -match 'url=(?<url>https://[^\s&]+)') {
+            $DownloadUrl = [uri]::UnescapeDataString($Matches['url'])
+            $TempPath = Join-Path $env:TEMP "NvidiaDriver.exe"
+
+            Write-Log "Downloading: $DownloadUrl" -Status "IN_PROGRESS"
+            Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempPath -ErrorAction Stop
+
+            # -s: Silent | -n: No Reboot
+            Write-Log "Executing Silent Install. Expect connection flicker." -Status "IN_PROGRESS"
+            $Process = Start-Process -FilePath $TempPath -ArgumentList "-s", "-n" -Wait -PassThru
+            
+            Write-Log "NVIDIA Result: $($Process.ExitCode)" -Status "SUCCESS" -IsData
+            Remove-Item $TempPath -Force
+        }
+    } catch { Write-Log "NVIDIA Update" "FAILED" }
+}
+
 # --- 3. MENU SYSTEM ---
 
 function Show-Menu {
