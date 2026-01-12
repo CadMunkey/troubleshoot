@@ -170,7 +170,7 @@ function Show-Menu {
     Write-Host "3) System Cleanup     9) Disk Health (SMART)"
     Write-Host "4) System Audit      10) User & Uptime"
     Write-Host "5) Reboot Status     11) Large File Scan"
-    Write-Host "6) Test Connectivity"
+    Write-Host "6) Test Connectivity 12) Get Nvidia Drivers"
     Write-Host "--------------------------------------------------"
     Write-Host "Q) Quit and Open Summary Log"
     Write-Host "=================================================="
@@ -191,6 +191,7 @@ do {
         '9' { Check-Disk }
         '10' { Get-UserUptime }
         '11' { Find-BigFiles }
+        '12' { Update-NvidiaDriver }
     }
 } while ($choice -ne 'q')
 
