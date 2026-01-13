@@ -87,72 +87,74 @@ function Analyze-Events {
     } catch { Write-Log "Event Analysis" "FAILED" }
 }
 
-function Analyze-Bsod {
-    Write-Log "Performing broad-spectrum BSOD analysis with Driver Lookup..."
-    
-    $StopCodeLookup = @{
-        "0xA"   = "IRQL_NOT_LESS_OR_EQUAL (Driver/Memory conflict)"
-        "0x1E"  = "KMODE_EXCEPTION_NOT_HANDLED (Faulty driver/service)"
-        "0x3B"  = "SYSTEM_SERVICE_EXCEPTION (Graphics/System call error)"
-        "0x4E"  = "PFN_LIST_CORRUPT (Bad RAM/Memory corruption)"
-        "0x50"  = "PAGE_FAULT_IN_NONPAGED_AREA (Invalid memory reference)"
-        "0x139" = "KERNEL_SECURITY_CHECK_FAILURE (Data corruption)"
-        "0xD1"  = "DRIVER_IRQL_NOT_LESS_OR_EQUAL (Driver memory error)"
-        "0x7E"  = "SYSTEM_THREAD_EXCEPTION_NOT_HANDLED (Driver error)"
-        "0x9F"  = "DRIVER_POWER_STATE_FAILURE (Power/Sleep issue)"
-        "0x133" = "DPC_WATCHDOG_VIOLATION (System hang/SSD issue)"
-        "0x124" = "WHEA_UNCORRECTABLE_ERROR (Hardware Failure)"
-        "0x7B"  = "INACCESSIBLE_BOOT_DEVICE (Storage/Boot error)"
-        "0xEF"  = "CRITICAL_PROCESS_DIED (System process failure)"
-        "0x116" = "VIDEO_TDR_FAILURE (GPU Driver timeout)"
-        "0x24"  = "NTFS_FILE_SYSTEM (Disk corruption)"
+function Analyze-SystemStability-Forensic {
+    Write-Log "!!! EXECUTING FULL FORENSIC STABILITY AUDIT !!!" -Status "INFO"
+
+    # --- 1. SYSTEM & THERMAL CONTEXT ---
+    $os = Get-CimInstance Win32_OperatingSystem
+    Write-Log "OS: $($os.Caption) (Build: $($os.BuildNumber)) | Boot Time: $($os.LastBootUpTime)"
+
+    # --- 2. CORRELATE WINDOWS UPDATES ---
+    Write-Log "Analyzing recent Windows Update history for conflicts..."
+    $RecentUpdates = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5
+    $LastUpdateDate = $RecentUpdates[0].InstalledOn
+    Write-Log "Most Recent Update: $($RecentUpdates[0].HotFixID) installed on $LastUpdateDate"
+
+    # --- 3. CRASH & DISK EVENT AGGREGATOR ---
+    $startTime = (Get-Date).AddDays(-1)
+    $eventMap = @{
+        1001 = "FATAL_BSOD"
+        161  = "LIVE_KERNEL_RESET"
+        41   = "DIRTY_SHUTDOWN_POWER_LOST"
+        7    = "DISK_BAD_BLOCK"
+        55   = "NTFS_CORRUPTION"
+        153  = "DISK_RETRY_OPER"
     }
 
     try {
-        $startTime = (Get-Date).AddDays(-1)
-        $crashes = Get-WinEvent -FilterHashtable @{
-            LogName = 'System'; Id = 1001; StartTime = $startTime
-        } -ErrorAction SilentlyContinue
+        $events = Get-WinEvent -FilterHashtable @{
+            LogName = 'System'; Id = $eventMap.Keys; StartTime = $startTime
+        } -ErrorAction SilentlyContinue | Sort-Object TimeCreated -Descending
 
-        if ($crashes) {
-            foreach ($crash in $crashes) {
-                # --- 1. Identify Error Code ---
-                $errorCode = "Unknown"
-                if ($crash.Message -match "(0x[0-9a-fA-F]+)") {
-                    $rawHex = $matches[1]
-                    $errorCode = "0x" + ([Convert]::ToString([Convert]::ToInt64($rawHex, 16), 16)).ToUpper()
-                }
+        if ($events) {
+            foreach ($event in $events) {
+                $type = $eventMap[$event.Id]
+                $isPostUpdate = if ($event.TimeCreated -gt $LastUpdateDate) { "YES" } else { "NO" }
 
-                $shortHex = $errorCode -replace "0x0+", "0x"
-                $friendlyName = $StopCodeLookup[$shortHex] ?? "Unknown BugCheck"
+                Write-Log "------------------------------------------------------------"
+                Write-Log "EVENT: [$type] @ $($event.TimeCreated)"
+                Write-Log "OCCURRED AFTER RECENT UPDATE: $isPostUpdate"
 
-                # --- 2. Identify Potential Driver/Module ---
+                # --- 4. IDENTIFY CULPRIT & AGE ---
+                if ($event.Message -match "(0x[0-9a-fA-F]+)") { $errorCode = $matches[1].ToUpper() }
+                
                 $culprit = "Unknown"
-                if ($crash.Message -match "Failure bucket ([^, ]+)") {
-                    # Often looks like 'LKD_0x133_DPC_atikmdag!unknown_function'
-                    # We strip it down to the likely filename
-                    $culprit = ($matches[1] -split "_")[-1].Split('!')[0]
-                }
+                if ($event.Message -match "([a-zA-Z0-9._-]+\.(sys|dll|exe))") { $culprit = $matches[1] }
 
-                # --- 3. Deep Dive: Find the driver on disk ---
-                $driverInfo = "No local file info found."
-                if ($culprit -match "\.sys$|\.exe$|\.dll$") {
-                    $file = Get-ChildItem -Path "C:\Windows\System32" -Filter $culprit -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($culprit -ne "Unknown") {
+                    $file = Get-ChildItem -Path "$env:SystemRoot\System32" -Filter $culprit -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
                     if ($file) {
-                        $ver = $file.VersionInfo
-                        $driverInfo = "Source: $($ver.CompanyName) | Desc: $($ver.FileDescription) | Ver: $($ver.FileVersion)"
+                        $v = $file.VersionInfo
+                        $ageDays = ((Get-Date) - $file.LastWriteTime).Days
+                        Write-Log "CULPRIT: $culprit | Age: $ageDays days | Provider: $($v.CompanyName)"
                     }
                 }
 
-                # --- 4. Final Log Output ---
-                $logMsg = "BSOD [$errorCode] $friendlyName | Likely Module: $culprit | $driverInfo"
-                Write-Log -Message $logMsg -Status "SUCCESS" -IsData
+                # --- 5. SMART LINKS ---
+                $shortCode = $errorCode -replace "0x0+", "0x"
+                Write-Log "RESEARCH: https://learn.microsoft.com/en-us/search/?terms=$shortCode"
             }
-        } else {
-            Write-Log "No BSOD events detected in the last 24 hours." "SUCCESS"
         }
     } catch {
-        Write-Log "Error during BSOD Analysis: $($_.Exception.Message)" "FAILED"
+        Write-Log "Forensic Loop Failed: $($_.Exception.Message)" -Status "FAILED"
+    }
+
+    # --- 6. STORAGE & DUMP INTEGRITY ---
+    $dumpFiles = Get-ChildItem -Path "C:\Windows\Minidump", "C:\Windows\MEMORY.DMP" -ErrorAction SilentlyContinue
+    if ($dumpFiles) {
+        $dumpFiles | ForEach-Object { Write-Log "DUMP READY: $($_.Name) ($($_.Length / 1MB -as [int]) MB)" -Status "SUCCESS" }
+    } else {
+        Write-Log "CRITICAL: No dump files found. Disk may be failing during write-out." -Status "FAILED"
     }
 }
 
