@@ -1,290 +1,131 @@
 <# 
 .SYNOPSIS
-Complete Remote Support Toolkit - All Functions Included
-Features: Logging, Audit, Repairs, Networking, Event Analysis, and Disk Health.
+Unrestricted System Forensic Toolkit 
+Combines Hardware, Storage, Network, and Stability Analysis.
 #>
 
-# --- 1. GLOBAL SETUP & ENCODING ---
+# --- 1. GLOBAL SETUP ---
 $LogFolder = "C:\SupportLogs"
-if (!(Test-Path $LogFolder)) { New-Item -Path $LogFolder -ItemType Directory -Force | Out-Null }
-$LogFile = Join-Path $LogFolder "Support_Final_Summary.txt"
+if (!(Test-Path $LogFolder)) { New-Item $LogFolder -ItemType Directory -Force | Out-Null }
+$LogFile = Join-Path $LogFolder "System_Forensic_Final.txt"
 
-# Ensure clean UTF8 encoding for the log file
-"--- IT SUPPORT SESSION: $env:COMPUTERNAME ---" | Out-File -FilePath $LogFile -Encoding UTF8
-"Started: $(Get-Date)`n" | Out-File -FilePath $LogFile -Append -Encoding UTF8
+"--- OVERLORD FORENSIC SESSION: $env:COMPUTERNAME ---" | Out-File $LogFile -Encoding UTF8
+"Started: $(Get-Date)`n" | Out-File $LogFile -Append -Encoding UTF8
 
 function Write-Log {
     param([string]$Message, [string]$Status = "INFO", [switch]$IsData)
     $Time = Get-Date -Format "HH:mm:ss"
     $Line = "[$Time] [$Status] - $Message"
-    $Line | Out-File -FilePath $LogFile -Append -Encoding UTF8
-    
+    $Line | Out-File $LogFile -Append -Encoding UTF8
     if ($IsData) {
-        Write-Host "`n>>> DATA REPORT:" -ForegroundColor Yellow
-        Write-Host $Message -ForegroundColor White
+        Write-Host "`n>>> DATA REPORT:" -ForegroundColor Yellow; Write-Host $Message -ForegroundColor White
     } else {
-        $Col = if($Status -eq "SUCCESS"){"Green"}elseif($Status -eq "FAILED"){"Red"}else{"Cyan"}
+        $Col = switch($Status) { "SUCCESS" {"Green"} "FAILED" {"Red"} "WARN" {"Yellow"} Default {"Cyan"} }
         Write-Host $Line -ForegroundColor $Col
     }
 }
 
-# --- 2. THE TOOLSET ---
-
-function Invoke-DnsFlush {
-    Write-Log "Flushing DNS..."
-    try { ipconfig /flushdns | Out-Null; Write-Log "DNS Flush" "SUCCESS" } catch { Write-Log "DNS Flush" "FAILED" }
-}
-
-function Invoke-SfcRepair {
-    Write-Log "Starting SFC (Silent)..."
-    try { sfc /scannow | Out-Null; Write-Log "SFC Repair" "SUCCESS" } catch { Write-Log "SFC Repair" "FAILED" }
-}
-
-function Invoke-Cleanup {
-    Write-Log "Cleaning Temp Files..."
-    try {
-        $paths = "$env:TEMP\*", "C:\Windows\Temp\*"
-        foreach ($p in $paths) { Remove-Item $p -Recurse -Force -ErrorAction SilentlyContinue }
-        Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue
-        Write-Log "System Cleanup" "SUCCESS"
-    } catch { Write-Log "System Cleanup" "FAILED" }
-}
-
-function Get-SystemAudit {
-    Write-Log "Gathering System Audit..."
-    try {
-        $comp = Get-CimInstance Win32_ComputerSystem
-        $bios = Get-CimInstance Win32_Bios
-        $gpu = Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name
-        $data = "Model: $($comp.Model) | Serial: $($bios.SerialNumber) | RAM: $([math]::Round($comp.TotalPhysicalMemory / 1GB))GB | GPU: $gpu"
-        Write-Log -Message $data -Status "SUCCESS" -IsData
-    } catch { Write-Log "Audit" "FAILED" }
-}
-
-function Check-RebootStatus {
-    $r = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"
-    $msg = if($r){"REBOOT REQUIRED"}else{"NO REBOOT NEEDED"}
-    Write-Log -Message "Reboot Status: $msg" -Status "SUCCESS" -IsData
-}
-
-function Test-Network {
-    Write-Log "Testing Pings..."
-    try {
-        $p1 = Test-Connection -ComputerName "8.8.8.8" -Count 2 -Quiet
-        $p2 = Test-Connection -ComputerName "www.google.com" -Count 2 -Quiet
-        $res = "IP Ping: $(if($p1){'OK'}else{'FAIL'}) | DNS Ping: $(if($p2){'OK'}else{'FAIL'})"
-        Write-Log -Message $res -Status "SUCCESS" -IsData
-    } catch { Write-Log "Network Test" "FAILED" }
-}
-
-function Analyze-Events {
-    Write-Log "Checking Errors (Last 24h)..."
-    try {
-        $time = (Get-Date).AddDays(-1)
-        $sys = (Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$time} -ErrorAction SilentlyContinue).Count
-        $app = (Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=$time} -ErrorAction SilentlyContinue).Count
-        Write-Log -Message "System Errors: $sys | App Errors: $app" -Status "SUCCESS" -IsData
-    } catch { Write-Log "Event Analysis" "FAILED" }
-}
+# --- 2. THE FORENSIC MODULES ---
 
 function Analyze-SystemStability-Forensic {
-    Write-Log "!!! EXECUTING FULL FORENSIC STABILITY AUDIT !!!" -Status "INFO"
-
-    # --- 1. SYSTEM & THERMAL CONTEXT ---
-    $os = Get-CimInstance Win32_OperatingSystem
-    Write-Log "OS: $($os.Caption) (Build: $($os.BuildNumber)) | Boot Time: $($os.LastBootUpTime)"
-
-    # --- 2. CORRELATE WINDOWS UPDATES ---
-    Write-Log "Analyzing recent Windows Update history for conflicts..."
-    $RecentUpdates = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 5
-    $LastUpdateDate = $RecentUpdates[0].InstalledOn
-    Write-Log "Most Recent Update: $($RecentUpdates[0].HotFixID) installed on $LastUpdateDate"
-
-    # --- 3. CRASH & DISK EVENT AGGREGATOR ---
-    $startTime = (Get-Date).AddDays(-1)
-    $eventMap = @{
-        1001 = "FATAL_BSOD"
-        161  = "LIVE_KERNEL_RESET"
-        41   = "DIRTY_SHUTDOWN_POWER_LOST"
-        7    = "DISK_BAD_BLOCK"
-        55   = "NTFS_CORRUPTION"
-        153  = "DISK_RETRY_OPER"
-    }
+    Write-Log "Initializing Full Stability & Crash Correlation..." -Status "INFO"
+    $RecentUpdates = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 3
+    $LastUpdate = if ($RecentUpdates) { $RecentUpdates[0].InstalledOn } else { [DateTime]::MinValue }
+    $eventMap = @{ 1001="BSOD"; 161="LIVE_KERNEL"; 41="DIRTY_POWER"; 7="BAD_BLOCK"; 153="DISK_RETRY" }
 
     try {
-        $events = Get-WinEvent -FilterHashtable @{
-            LogName = 'System'; Id = $eventMap.Keys; StartTime = $startTime
-        } -ErrorAction SilentlyContinue | Sort-Object TimeCreated -Descending
-
-        if ($events) {
-            foreach ($event in $events) {
-                $type = $eventMap[$event.Id]
-                $isPostUpdate = if ($event.TimeCreated -gt $LastUpdateDate) { "YES" } else { "NO" }
-
-                Write-Log "------------------------------------------------------------"
-                Write-Log "EVENT: [$type] @ $($event.TimeCreated)"
-                Write-Log "OCCURRED AFTER RECENT UPDATE: $isPostUpdate"
-
-                # --- 4. IDENTIFY CULPRIT & AGE ---
-                if ($event.Message -match "(0x[0-9a-fA-F]+)") { $errorCode = $matches[1].ToUpper() }
-                
-                $culprit = "Unknown"
-                if ($event.Message -match "([a-zA-Z0-9._-]+\.(sys|dll|exe))") { $culprit = $matches[1] }
-
-                if ($culprit -ne "Unknown") {
-                    $file = Get-ChildItem -Path "$env:SystemRoot\System32" -Filter $culprit -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-                    if ($file) {
-                        $v = $file.VersionInfo
-                        $ageDays = ((Get-Date) - $file.LastWriteTime).Days
-                        Write-Log "CULPRIT: $culprit | Age: $ageDays days | Provider: $($v.CompanyName)"
-                    }
-                }
-
-                # --- 5. SMART LINKS ---
-                $shortCode = $errorCode -replace "0x0+", "0x"
-                Write-Log "RESEARCH: https://learn.microsoft.com/en-us/search/?terms=$shortCode"
+        $events = Get-WinEvent -FilterHashtable @{LogName='System'; Id=$eventMap.Keys; StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue | Sort-Object TimeCreated -Descending
+        foreach ($event in $events) {
+            $errorCode = "0x0"; $culprit = "Unknown"
+            if ($event.Message -match "(0x[0-9a-fA-F]+)") { $errorCode = $matches[1].ToUpper() }
+            if ($event.Message -match "([a-zA-Z0-9._-]+\.(sys|dll|exe))") { $culprit = $matches[1] }
+            
+            Write-Log "[$($eventMap[$event.Id])] @ $($event.TimeCreated) | After Update: $($event.TimeCreated -gt $LastUpdate) | Code: $errorCode | File: $culprit"
+            if ($culprit -ne "Unknown") {
+                $f = Get-ChildItem "$env:SystemRoot\System32" -Filter $culprit -Recurse -ErrorAction SilentlyContinue | Select -First 1
+                if ($f) { Write-Log "   Module Detail: $(($f.VersionInfo).CompanyName) | Age: $(((Get-Date)-$f.LastWriteTime).Days) days" -Status "SUCCESS" }
             }
         }
-    } catch {
-        Write-Log "Forensic Loop Failed: $($_.Exception.Message)" -Status "FAILED"
-    }
-
-    # --- 6. STORAGE & DUMP INTEGRITY ---
-    $dumpFiles = Get-ChildItem -Path "C:\Windows\Minidump", "C:\Windows\MEMORY.DMP" -ErrorAction SilentlyContinue
-    if ($dumpFiles) {
-        $dumpFiles | ForEach-Object { Write-Log "DUMP READY: $($_.Name) ($($_.Length / 1MB -as [int]) MB)" -Status "SUCCESS" }
-    } else {
-        Write-Log "CRITICAL: No dump files found. Disk may be failing during write-out." -Status "FAILED"
-    }
+    } catch { Write-Log "Stability Forensic Failed" "FAILED" }
 }
 
-function Check-Disk {
-    Write-Log "Checking SMART Status..."
+function Check-Disk-Forensic {
+    Write-Log "Analyzing Storage Reliability Counters..." -Status "INFO"
+    
     try {
-        $d = Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue
-        if ($null -eq $d) { Write-Log "No SMART data available." }
-        else {
-            $stat = if($d.PredictFailure){"FAILING"}else{"HEALTHY"}
-            Write-Log "Disk Health: $stat" (if($d.PredictFailure){"FAILED"}else{"SUCCESS"}) -IsData
+        Get-PhysicalDisk | ForEach-Object {
+            $rel = Get-StorageReliabilityCounter -PhysicalDisk $_
+            $msg = "Disk: $($_.FriendlyName) | Health: $($_.HealthStatus) | Wear: $($rel.Wear)% | Temp: $($rel.Temperature)C | Errors: $($rel.ReadErrorsTotal)"
+            Write-Log $msg -IsData
+            if ($rel.Wear -gt 90 -or $rel.Temperature -gt 70) { Write-Log "CRITICAL: Disk threshold reached!" "FAILED" }
         }
-    } catch { Write-Log "Disk Check" "FAILED" }
+    } catch { Write-Log "Disk Audit Failed" "FAILED" }
 }
 
-function Get-UserUptime {
-    Write-Log "Checking Uptime & Users..."
+function Test-Network-Forensic {
+    Write-Log "Analyzing Network Path & NIC Stability..." -Status "INFO"
     try {
-        $os = Get-CimInstance Win32_OperatingSystem
-        $up = (Get-Date) - $os.LastBootUpTime
+        $nic = Get-NetAdapterStatistics | Where-Object { $_.ReceivedBytes -gt 0 }
+        $dnsStart = Get-Date; [System.Net.Dns]::GetHostAddresses("www.google.com") | Out-Null
+        $dnsTime = ((Get-Date) - $dnsStart).TotalMilliseconds
         
-        # Fixed logic for wider compatibility
-        $allUsers = Get-CimInstance Win32_LogonSession | Get-CimAssociatedInstance -ResultClassName Win32_UserAccount
-        $userNames = $allUsers.Name | Select-Object -Unique
-        $userString = $userNames -join ", "
-        
-        $data = "Uptime: $($up.Days)d $($up.Hours)h | Users: $userString"
-        Write-Log -Message $data -Status "SUCCESS" -IsData
-    } catch { Write-Log "Uptime Check" "FAILED" }
+        Write-Log "NIC: $($nic.Name) | Errors(Rx): $($nic.ReceivedPacketErrors) | DNS: $($dnsTime)ms" -IsData
+        $resets = Get-WinEvent -FilterHashtable @{LogName='System'; Id=10400; StartTime=(Get-Date).AddDays(-1)} -ErrorAction SilentlyContinue
+        if ($resets) { Write-Log "Detected $($resets.Count) NIC resets in 24h!" "WARN" }
+    } catch { Write-Log "Network Forensic Failed" "FAILED" }
 }
 
-function Find-BigFiles {
-    Write-Log "Scanning User Profile for files > 500MB..."
+function Get-SecurityPosture {
+    Write-Log "Auditing Security & Antivirus State..." -Status "INFO"
+    
     try {
-        $files = Get-ChildItem -Path $env:USERPROFILE -Recurse -File -ErrorAction SilentlyContinue | 
-                 Where-Object { $_.Length -gt 500MB } | Sort-Object Length -Descending | Select-Object -First 3
-        if($files){
-            foreach($f in $files){ Write-Log "Found: $($f.Name) ($([math]::Round($f.Length/1GB,2))GB)" "INFO" -IsData }
-        } else { Write-Log "No large files found." "SUCCESS" }
-    } catch { Write-Log "File Scan" "FAILED" }
+        $av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct
+        $fw = Get-NetFirewallProfile | Select-Object Name, Enabled
+        $data = "AV: $($av.displayName) | State: $($av.productState) | FW: $($fw[0].Enabled)"
+        Write-Log $data -IsData
+    } catch { Write-Log "Security Audit Failed" "FAILED" }
 }
 
-function Update-NvidiaDriver {
-    Write-Log "Starting NVIDIA Silent Update..."
+function Analyze-UpdateConflicts {
+    Write-Log "Scanning for Failed Windows Updates..." -Status "INFO"
     try {
-        $SearchUrl = "https://www.nvidia.com/Download/processFind.aspx?psid=101&pfid=845&osid=57&lid=1&whql=1&dtcid=1"
-        $Page = Invoke-WebRequest -Uri $SearchUrl -UseBasicParsing -ErrorAction Stop
-
-        if ($Page.Content -match 'url=(?<url>https://[^\s&]+)') {
-            $DownloadUrl = [uri]::UnescapeDataString($Matches['url'])
-            $TempPath = Join-Path $env:TEMP "NvidiaDriver.exe"
-
-            Write-Log "Downloading: $DownloadUrl" -Status "IN_PROGRESS"
-            Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempPath -ErrorAction Stop
-
-            # -s: Silent | -n: No Reboot
-            Write-Log "Executing Silent Install. Expect connection flicker." -Status "IN_PROGRESS"
-            $Process = Start-Process -FilePath $TempPath -ArgumentList "-s", "-n" -Wait -PassThru
-            
-            Write-Log "NVIDIA Result: $($Process.ExitCode)" -Status "SUCCESS" -IsData
-            Remove-Item $TempPath -Force
-        }
-    } catch { Write-Log "NVIDIA Update" "FAILED" }
-}
-function Fetch-DDU {
-    # Define the folder path on the Desktop
-    $folderName = "DDU_Download"
-    $desktopPath = [System.IO.Path]::Combine($env:USERPROFILE, "Desktop", $folderName)
-
-    # Create the folder if it doesn't exist
-    if (-not (Test-Path $desktopPath)) {
-        New-Item -Path $desktopPath -ItemType Directory | Out-Null
-        Write-Host "Created folder at $desktopPath" -ForegroundColor Cyan
-    }
-
-    # Target URL for the DDU self-extracting executable
-    $url = "https://www.wagnardsoft.com/DDU/download/DDU%20v18.0.9.1.exe"
-    $destination = Join-Path $desktopPath "DDU_Setup.exe"
-
-    Write-Host "Downloading DDU... please wait." -ForegroundColor Yellow
-
-    try {
-        # Download the file
-        Invoke-WebRequest -Uri $url -OutFile $destination
-        Write-Host "Success! DDU saved to: $destination" -ForegroundColor Green
-    }
-    catch {
-        Write-Error "Failed to download DDU. Check your internet connection or the URL."
-    }
+        $failed = Get-WinEvent -FilterHashtable @{LogName='Setup'; Level=2; StartTime=(Get-Date).AddDays(-7)} -ErrorAction SilentlyContinue
+        if ($failed) {
+            foreach($f in $failed) { Write-Log "Failed Update: $($f.TimeCreated) - $($f.Message.Substring(0,50))..." "WARN" }
+        } else { Write-Log "No failed updates in last 7 days." "SUCCESS" }
+    } catch { Write-Log "Update Audit Failed" "FAILED" }
 }
 
 # --- 3. MENU SYSTEM ---
-
 function Show-Menu {
-    Write-Host "`n==================================================" -ForegroundColor White
-    Write-Host "      REMOTE SUPPORT TOOLKIT - FULL BUILD" -ForegroundColor Cyan
+    Clear-Host
     Write-Host "==================================================" -ForegroundColor White
-    Write-Host "0) Nothing                10) User & Uptime             "
-    Write-Host "1) Flush DNS              11) Large File Scan"
-    Write-Host "2) SFC Repair             12) Get Nvidia Drivers"
-    Write-Host "3) System Cleanup         13) Get DDU"
-    Write-Host "4) System Audit           14) ---"
-    Write-Host "5) Reboot Status          15) ---"
-    Write-Host "6) Test Connectivity      16) ---"
-    Write-Host "7) Event Errors (24h)     17) ---"
-    Write-Host "8) BSOD Analysis          18) ---"
-    Write-Host "9) Disk Health (SMART)    19) ---"
+    Write-Host "      SYSTEM FORENSIC OVERLORD TOOLKIT" -ForegroundColor Cyan
+    Write-Host "==================================================" -ForegroundColor White
+    Write-Host "1) FULL STABILITY (BSOD/Update Correlation)"
+    Write-Host "2) DISK FORENSIC (SMART/Wear/Temp)"
+    Write-Host "3) NETWORK PATH (Errors/DNS/NIC Resets)"
+    Write-Host "4) SECURITY POSTURE (AV/Firewall State)"
+    Write-Host "5) UPDATE CONFLICTS (Failed Patches)"
+    Write-Host "6) SYSTEM CLEANUP & SFC REPAIR"
+    Write-Host "7) DRIVER TOOLS (DDU/Nvidia)"
     Write-Host "--------------------------------------------------"
     Write-Host "Q) Quit and Open Summary Log"
-    Write-Host "=================================================="
 }
 
 do {
     Show-Menu
-    $choice = Read-Host "Select an option"
+    $choice = Read-Host "`nEnter Choice"
     switch ($choice) {
-        '1' { Invoke-DnsFlush }
-        '2' { Invoke-SfcRepair }
-        '3' { Invoke-Cleanup }
-        '4' { Get-SystemAudit }
-        '5' { Check-RebootStatus }
-        '6' { Test-Network }
-        '7' { Analyze-Events }
-        '8' { Analyze-SystemStability-Forensic}
-        '9' { Check-Disk }
-        '10' { Get-UserUptime }
-        '11' { Find-BigFiles }
-        '12' { Update-NvidiaDriver }
-        '13' { Fetch-DDU }
+        '1' { Analyze-SystemStability-Forensic }
+        '2' { Check-Disk-Forensic }
+        '3' { Test-Network-Forensic }
+        '4' { Get-SecurityPosture }
+        '5' { Analyze-UpdateConflicts }
+        '6' { sfc /scannow; Write-Log "SFC Complete" "SUCCESS" }
+        '7' { Write-Log "Please use specific sub-menu for drivers." }
     }
+    if ($choice -ne 'q') { Read-Host "`nPress Enter to return to menu..." }
 } while ($choice -ne 'q')
 
 if (Test-Path $LogFile) { notepad.exe $LogFile }
