@@ -96,7 +96,7 @@ function Invoke-SystemRepair {
 }
 
 function Update-Nvidia-Manual {
-    $SearchUrl = "https://www.nvidia.com/Download/processFind.aspx?psid=101&pfid=845&osid=57&lid=1&whql=1&dtcid=1"
+    $SearchUrl = "https://www.nvidia.com/en-us/geforce/drivers/results/260405/"
     Write-Log "Launching NVIDIA Driver Intelligence Page..." -Status "SUCCESS"
     Start-Process $SearchUrl
 }
