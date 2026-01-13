@@ -88,13 +88,72 @@ function Analyze-Events {
 }
 
 function Analyze-Bsod {
-    Write-Log "Checking for BSOD..."
+    Write-Log "Performing broad-spectrum BSOD analysis with Driver Lookup..."
+    
+    $StopCodeLookup = @{
+        "0xA"   = "IRQL_NOT_LESS_OR_EQUAL (Driver/Memory conflict)"
+        "0x1E"  = "KMODE_EXCEPTION_NOT_HANDLED (Faulty driver/service)"
+        "0x3B"  = "SYSTEM_SERVICE_EXCEPTION (Graphics/System call error)"
+        "0x4E"  = "PFN_LIST_CORRUPT (Bad RAM/Memory corruption)"
+        "0x50"  = "PAGE_FAULT_IN_NONPAGED_AREA (Invalid memory reference)"
+        "0x139" = "KERNEL_SECURITY_CHECK_FAILURE (Data corruption)"
+        "0xD1"  = "DRIVER_IRQL_NOT_LESS_OR_EQUAL (Driver memory error)"
+        "0x7E"  = "SYSTEM_THREAD_EXCEPTION_NOT_HANDLED (Driver error)"
+        "0x9F"  = "DRIVER_POWER_STATE_FAILURE (Power/Sleep issue)"
+        "0x133" = "DPC_WATCHDOG_VIOLATION (System hang/SSD issue)"
+        "0x124" = "WHEA_UNCORRECTABLE_ERROR (Hardware Failure)"
+        "0x7B"  = "INACCESSIBLE_BOOT_DEVICE (Storage/Boot error)"
+        "0xEF"  = "CRITICAL_PROCESS_DIED (System process failure)"
+        "0x116" = "VIDEO_TDR_FAILURE (GPU Driver timeout)"
+        "0x24"  = "NTFS_FILE_SYSTEM (Disk corruption)"
+    }
+
     try {
-        $crash = Get-WinEvent -FilterHashtable @{LogName='System'; ID=1001} -MaxEvents 1 -ErrorAction SilentlyContinue
-        if ($crash -and ($crash.Message -match "0x[0-9a-fA-F]+")) {
-            Write-Log -Message "Last Crash Code: $($matches[0])" -Status "SUCCESS" -IsData
-        } else { Write-Log "No BSOD detected." "SUCCESS" }
-    } catch { Write-Log "BSOD Analysis" "FAILED" }
+        $startTime = (Get-Date).AddDays(-1)
+        $crashes = Get-WinEvent -FilterHashtable @{
+            LogName = 'System'; Id = 1001; StartTime = $startTime
+        } -ErrorAction SilentlyContinue
+
+        if ($crashes) {
+            foreach ($crash in $crashes) {
+                # --- 1. Identify Error Code ---
+                $errorCode = "Unknown"
+                if ($crash.Message -match "(0x[0-9a-fA-F]+)") {
+                    $rawHex = $matches[1]
+                    $errorCode = "0x" + ([Convert]::ToString([Convert]::ToInt64($rawHex, 16), 16)).ToUpper()
+                }
+
+                $shortHex = $errorCode -replace "0x0+", "0x"
+                $friendlyName = $StopCodeLookup[$shortHex] ?? "Unknown BugCheck"
+
+                # --- 2. Identify Potential Driver/Module ---
+                $culprit = "Unknown"
+                if ($crash.Message -match "Failure bucket ([^, ]+)") {
+                    # Often looks like 'LKD_0x133_DPC_atikmdag!unknown_function'
+                    # We strip it down to the likely filename
+                    $culprit = ($matches[1] -split "_")[-1].Split('!')[0]
+                }
+
+                # --- 3. Deep Dive: Find the driver on disk ---
+                $driverInfo = "No local file info found."
+                if ($culprit -match "\.sys$|\.exe$|\.dll$") {
+                    $file = Get-ChildItem -Path "C:\Windows\System32" -Filter $culprit -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                    if ($file) {
+                        $ver = $file.VersionInfo
+                        $driverInfo = "Source: $($ver.CompanyName) | Desc: $($ver.FileDescription) | Ver: $($ver.FileVersion)"
+                    }
+                }
+
+                # --- 4. Final Log Output ---
+                $logMsg = "BSOD [$errorCode] $friendlyName | Likely Module: $culprit | $driverInfo"
+                Write-Log -Message $logMsg -Status "SUCCESS" -IsData
+            }
+        } else {
+            Write-Log "No BSOD events detected in the last 24 hours." "SUCCESS"
+        }
+    } catch {
+        Write-Log "Error during BSOD Analysis: $($_.Exception.Message)" "FAILED"
+    }
 }
 
 function Check-Disk {
