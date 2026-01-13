@@ -114,7 +114,7 @@ function Fetch-DDU {
 function Show-Menu {
     Clear-Host
     Write-Host "==================================================" -ForegroundColor White
-    Write-Host "      SYSTEM FORENSIC MASTER TOOLKIT" -ForegroundColor Cyan
+    Write-Host "      STEELY'S TROUBLE SHOOTING TOOLKIT : 26.01.001" -ForegroundColor Cyan
     Write-Host "==================================================" -ForegroundColor White
     Write-Host "1) Stability Audit (BSOD & Updates)"
     Write-Host "2) Disk Forensic (Wear & Errors)"
