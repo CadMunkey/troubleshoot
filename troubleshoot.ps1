@@ -278,7 +278,7 @@ do {
         '5' { Check-RebootStatus }
         '6' { Test-Network }
         '7' { Analyze-Events }
-        '8' { Analyze-Bsod }
+        '8' { Analyze-SystemStability-Forensic}
         '9' { Check-Disk }
         '10' { Get-UserUptime }
         '11' { Find-BigFiles }
