@@ -158,6 +158,32 @@ function Update-NvidiaDriver {
         }
     } catch { Write-Log "NVIDIA Update" "FAILED" }
 }
+function Fetch-DDU {
+    # Define the folder path on the Desktop
+    $folderName = "DDU_Download"
+    $desktopPath = [System.IO.Path]::Combine($env:USERPROFILE, "Desktop", $folderName)
+
+    # Create the folder if it doesn't exist
+    if (-not (Test-Path $desktopPath)) {
+        New-Item -Path $desktopPath -ItemType Directory | Out-Null
+        Write-Host "Created folder at $desktopPath" -ForegroundColor Cyan
+    }
+
+    # Target URL for the DDU self-extracting executable
+    $url = "https://www.wagnardsoft.com/DDU/download/DDU%20v18.0.9.1.exe"
+    $destination = Join-Path $desktopPath "DDU_Setup.exe"
+
+    Write-Host "Downloading DDU... please wait." -ForegroundColor Yellow
+
+    try {
+        # Download the file
+        Invoke-WebRequest -Uri $url -OutFile $destination
+        Write-Host "Success! DDU saved to: $destination" -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Failed to download DDU. Check your internet connection or the URL."
+    }
+}
 
 # --- 3. MENU SYSTEM ---
 
@@ -192,6 +218,7 @@ do {
         '10' { Get-UserUptime }
         '11' { Find-BigFiles }
         '12' { Update-NvidiaDriver }
+        '13' { Fetch-DDU }
     }
 } while ($choice -ne 'q')
 
