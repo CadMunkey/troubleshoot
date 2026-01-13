@@ -191,12 +191,16 @@ function Show-Menu {
     Write-Host "`n==================================================" -ForegroundColor White
     Write-Host "      REMOTE SUPPORT TOOLKIT - FULL BUILD" -ForegroundColor Cyan
     Write-Host "==================================================" -ForegroundColor White
-    Write-Host "1) Flush DNS          7) Event Errors (24h)"
-    Write-Host "2) SFC Repair         8) BSOD Analysis"
-    Write-Host "3) System Cleanup     9) Disk Health (SMART)"
-    Write-Host "4) System Audit      10) User & Uptime"
-    Write-Host "5) Reboot Status     11) Large File Scan"
-    Write-Host "6) Test Connectivity 12) Get Nvidia Drivers"
+    Write-Host "0) Nothing                10) User & Uptime             "
+    Write-Host "1) Flush DNS              11) Large File Scan"
+    Write-Host "2) SFC Repair             12) Get Nvidia Drivers"
+    Write-Host "3) System Cleanup         13) Get DDU"
+    Write-Host "4) System Audit           14) ---"
+    Write-Host "5) Reboot Status          15) ---"
+    Write-Host "6) Test Connectivity      16) ---"
+    Write-Host "7) Event Errors (24h)     17) ---"
+    Write-Host "8) BSOD Analysis          18) ---"
+    Write-Host "9) Disk Health (SMART)    19) ---"
     Write-Host "--------------------------------------------------"
     Write-Host "Q) Quit and Open Summary Log"
     Write-Host "=================================================="
